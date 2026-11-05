@@ -34,11 +34,11 @@ final class RuleMatcherTests: XCTestCase {
 
     func testApplyStripsIdentifyingFields() {
         let m = RuleMatcher(rules: [rule(.domain, "secret.com")])
-        let blocked = m.apply(Observation(bundleID: "com.google.Chrome", appName: "Google Chrome", title: "Secret", domain: "secret.com"))
+        let blocked = m.apply(Capture(bundleID: "com.google.Chrome", appName: "Google Chrome", title: "Secret", domain: "secret.com"))
         XCTAssertEqual(blocked, .blocked)
         XCTAssertNil(blocked.title); XCTAssertNil(blocked.domain); XCTAssertNil(blocked.bundleID)
         XCTAssertEqual(blocked.appName, "Blocked")
-        let ok = m.apply(Observation(bundleID: "a", appName: "A", title: "t", domain: "fine.com"))
+        let ok = m.apply(Capture(bundleID: "a", appName: "A", title: "t", domain: "fine.com"))
         XCTAssertFalse(ok.blocked)
         XCTAssertEqual(ok.domain, "fine.com")
     }

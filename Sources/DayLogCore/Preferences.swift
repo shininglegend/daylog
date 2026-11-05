@@ -1,6 +1,6 @@
 import Foundation
 
-public struct Settings: Equatable, Sendable {
+public struct Preferences: Equatable, Sendable {
     public var pollInterval: TimeInterval = 5
     public var idleThreshold: TimeInterval = 120
     /// nil keeps daily totals forever.
@@ -22,8 +22,8 @@ extension DayLogStore {
         try db.run("INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", [key, value])
     }
 
-    public func loadSettings() throws -> Settings {
-        var s = Settings()
+    public func loadPreferences() throws -> Preferences {
+        var s = Preferences()
         if let v = try value("poll_interval").flatMap(Double.init), v >= 1 { s.pollInterval = v }
         if let v = try value("idle_threshold").flatMap(Double.init), v >= 10 { s.idleThreshold = v }
         if let v = try value("totals_retention_days") { s.totalsRetentionDays = v == "forever" ? nil : Int(v).map { max(30, $0) } ?? 90 }
@@ -32,7 +32,7 @@ extension DayLogStore {
         return s
     }
 
-    public func saveSettings(_ s: Settings) throws {
+    public func savePreferences(_ s: Preferences) throws {
         try db.transaction {
             try set("poll_interval", String(s.pollInterval))
             try set("idle_threshold", String(s.idleThreshold))

@@ -1,7 +1,7 @@
 import Foundation
 
 /// Raw facts from one poll, before block rules are applied.
-public struct Observation: Equatable, Sendable {
+public struct Capture: Equatable, Sendable {
     public var bundleID: String?
     public var appName: String?
     public var title: String?

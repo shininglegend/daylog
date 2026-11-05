@@ -183,15 +183,15 @@ final class StoreTests: XCTestCase {
         XCTAssertEqual(try s.rules().map(\.pattern), ["bank.com"])
     }
 
-    func testSettingsRoundTrip() throws {
+    func testPreferencesRoundTrip() throws {
         let s = try store(ManualClock(t0))
-        XCTAssertEqual(try s.loadSettings(), Settings())
-        var settings = Settings()
+        XCTAssertEqual(try s.loadPreferences(), Preferences())
+        var settings = Preferences()
         settings.pollInterval = 10
         settings.totalsRetentionDays = nil
         settings.onboarded = true
-        try s.saveSettings(settings)
-        XCTAssertEqual(try s.loadSettings(), settings)
+        try s.savePreferences(settings)
+        XCTAssertEqual(try s.loadPreferences(), settings)
     }
 
     func testDatabaseFileContainsNoPlaintextTitlesOrDomains() throws {

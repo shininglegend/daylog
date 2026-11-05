@@ -58,7 +58,7 @@ public struct RuleMatcher: Sendable {
     }
 
     /// The state to record for an observation: blocked activity keeps nothing identifying.
-    public func apply(_ o: Observation) -> ActivityState {
+    public func apply(_ o: Capture) -> ActivityState {
         if matches(bundleID: o.bundleID, title: o.title, domain: o.domain) { return .blocked }
         return ActivityState(bundleID: o.bundleID, appName: o.appName, title: o.title, domain: o.domain)
     }

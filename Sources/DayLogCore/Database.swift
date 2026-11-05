@@ -67,7 +67,14 @@ public final class Database {
         try Schema.migrate(self)
     }
 
-    deinit { sqlite3_close(handle) }
+    deinit { close() }
+
+    /// Closes the connection. Further calls fail.
+    public func close() {
+        guard let handle else { return }
+        sqlite3_close_v2(handle)
+        self.handle = nil
+    }
 
     public func execute(_ sql: String) throws {
         var err: UnsafeMutablePointer<CChar>?
