@@ -1,4 +1,5 @@
 import AppKit
+import Observation
 import SwiftUI
 
 @main
@@ -27,9 +28,12 @@ struct MenuBarLabel: View {
     }
 }
 
+/// Observable so the menu bar scene redraws once `model` is created at launch;
+/// the scene body is first evaluated before `applicationDidFinishLaunching` runs.
+@Observable
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private(set) var model: AppModel?
-    private var mainWindow: MainWindowController?
+    @ObservationIgnored private var mainWindow: MainWindowController?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         do {

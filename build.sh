@@ -50,9 +50,13 @@ echo "==> No-network check"
 
 echo "==> Verifying signature"
 codesign --verify --deep --strict "$APP"
-codesign -d --entitlements - --xml "$APP" 2>/dev/null | grep -q "com.apple.security.automation.apple-events" \
+# Capture output before grepping: with pipefail, `grep -q` exiting early can make
+# codesign die of SIGPIPE and fail the check even when the match was found.
+ENTITLEMENTS="$(codesign -d --entitlements - --xml "$APP" 2>/dev/null)"
+grep -q "com.apple.security.automation.apple-events" <<<"$ENTITLEMENTS" \
   || { echo "missing apple-events entitlement" >&2; exit 1; }
-codesign -dv "$APP" 2>&1 | grep -q "flags=.*runtime" \
+SIGNATURE="$(codesign -dv "$APP" 2>&1)"
+grep -q "flags=.*runtime" <<<"$SIGNATURE" \
   || { echo "hardened runtime not enabled" >&2; exit 1; }
 
 echo "==> Built $APP"
