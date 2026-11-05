@@ -19,16 +19,17 @@ settings:
     CURRENT_PROJECT_VERSION: "1"
     DEAD_CODE_STRIPPING: YES
 targets:
+  # Static, so the app is one binary: hardened runtime's library validation
+  # rejects an embedded framework when signed without a Team ID (ad-hoc or self-signed).
   DayLogCore:
-    type: framework
+    type: library.static
     platform: macOS
     sources: [Sources/DayLogCore]
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: local.daylog.core
-        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_NAME: DayLogCore
+        SWIFT_INSTALL_OBJC_HEADER: NO
         SKIP_INSTALL: YES
-        DEFINES_MODULE: YES
     dependencies:
       - sdk: libsqlite3.tbd
       - sdk: Security.framework
@@ -40,7 +41,6 @@ targets:
     sources: [Sources/DayLog]
     dependencies:
       - target: DayLogCore
-        embed: true
       - sdk: ServiceManagement.framework
       - sdk: LocalAuthentication.framework
     settings:

@@ -29,14 +29,14 @@ xcodegen generate --quiet
 echo "==> Running unit tests"
 xcodebuild test \
   -project DayLog.xcodeproj -scheme DayLog \
-  -destination 'platform=macOS' \
+  -destination "platform=macOS,arch=$(uname -m)" \
   -derivedDataPath "$DERIVED" \
   -quiet
 
 echo "==> Building Release"
 xcodebuild build \
   -project DayLog.xcodeproj -scheme DayLog -configuration Release \
-  -destination 'platform=macOS' \
+  -destination 'generic/platform=macOS' \
   -derivedDataPath "$DERIVED" \
   CODE_SIGN_IDENTITY="$IDENTITY" CODE_SIGN_STYLE=Manual \
   OTHER_CODE_SIGN_FLAGS="--timestamp=none" \
