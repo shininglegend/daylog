@@ -107,7 +107,6 @@ Sign with a stable identity so macOS permission grants survive rebuilds.
   - the purge removes the keys, and raw bytes from a purged hour cannot be decrypted
   - totals group correctly through the HMAC
   - a `strings` scan of the database file finds no plaintext titles or domains
-- **Optional:** an LAContext Touch ID prompt before showing the main window, off by default. Document that it locks the UI only and is not a cryptographic protection.D
 
 ## Verification
 - **Unit tests:** segment state transitions, rule matching, domain extraction (including incognito and internal pages), purge and rollup math with an injected clock, and the combined live-plus-totals breakdown query.

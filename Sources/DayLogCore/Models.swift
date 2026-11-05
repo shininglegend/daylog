@@ -49,13 +49,16 @@ public struct Segment: Identifiable, Equatable, Sendable {
     public var state: ActivityState
     /// The hour key is gone, so title/domain could not be decrypted.
     public var expired: Bool
+    /// The keychain couldn't be read, so title/domain are missing for now but may come back.
+    public var unavailable: Bool
 
-    public init(id: Int64, start: Date, end: Date, state: ActivityState, expired: Bool = false) {
+    public init(id: Int64, start: Date, end: Date, state: ActivityState, expired: Bool = false, unavailable: Bool = false) {
         self.id = id
         self.start = start
         self.end = end
         self.state = state
         self.expired = expired
+        self.unavailable = unavailable
     }
 
     public var duration: TimeInterval { max(0, end.timeIntervalSince(start)) }

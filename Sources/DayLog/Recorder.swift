@@ -7,6 +7,8 @@ import os
 /// Stops (closes the open segment) while paused, locked, asleep, or switched out.
 final class Recorder: NSObject {
     private static let log = Logger(subsystem: "local.daylog", category: "recorder")
+    /// Activity shorter than this isn't recorded as its own entry.
+    static let minSegmentDuration: TimeInterval = 30
 
     private let store: DayLogStore
     private let tracker: SegmentTracker
@@ -37,7 +39,7 @@ final class Recorder: NSObject {
     init(store: DayLogStore, settings: Preferences) {
         self.store = store
         self.settings = settings
-        self.tracker = SegmentTracker(sink: store, clock: store.clock)
+        self.tracker = SegmentTracker(sink: store, clock: store.clock, minDuration: Recorder.minSegmentDuration)
         super.init()
         updateGap()
     }
@@ -130,23 +132,33 @@ final class Recorder: NSObject {
         }
     }
 
+    /// Browsers whose private windows DayLog can't detect. Their window titles are never
+    /// recorded (only the app name), so private-browsing titles can't end up on disk.
+    static let unverifiableBrowsers: Set<String> = [
+        "com.apple.Safari", "com.apple.SafariTechnologyPreview",
+        "org.mozilla.firefox", "org.mozilla.firefoxdeveloperedition", "org.mozilla.nightly",
+        "com.google.Chrome.beta", "com.google.Chrome.dev", "com.google.Chrome.canary", "org.chromium.Chromium",
+        "com.brave.Browser", "com.microsoft.edgemac", "company.thebrowser.Browser", "com.vivaldi.Vivaldi",
+        "com.operasoftware.Opera", "app.zen-browser.zen", "org.torproject.torbrowser",
+    ]
+
     private func observe() -> Capture {
         guard let app = NSWorkspace.shared.frontmostApplication else {
             return Capture(bundleID: nil, appName: nil, title: nil, domain: nil)
         }
-        var title = accessibilityGranted ? Self.focusedWindowTitle(pid: app.processIdentifier) : nil
+        var title: String?
         var domain: String?
         if app.bundleIdentifier == ChromeProbe.bundleID {
-            // Chrome titles are kept only when Chrome confirms the window isn't incognito.
+            // Chrome's title comes from the same Apple Events reply as the incognito check,
+            // and is kept only when Chrome confirms the window is a normal one.
             switch chrome.probe() {
-            case .domain(let d): domain = d; chromeDenied = false
-            case .incognito: domain = nil; title = nil; chromeDenied = false
-            case .denied:
-                chromeDenied = true
-                title = nil
-            case .unavailable:
-                title = nil
+            case .window(let d, let t): domain = d; title = t; chromeDenied = false
+            case .noWindow, .incognito: chromeDenied = false
+            case .denied: chromeDenied = true
+            case .unavailable: break
             }
+        } else if accessibilityGranted, !Self.unverifiableBrowsers.contains(app.bundleIdentifier ?? "") {
+            title = Self.focusedWindowTitle(pid: app.processIdentifier)
         }
         return Capture(bundleID: app.bundleIdentifier, appName: app.localizedName, title: title, domain: domain)
     }

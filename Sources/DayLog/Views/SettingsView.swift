@@ -31,9 +31,6 @@ struct SettingsView: View {
                         if on != model.launchAtLogin { model.setLaunchAtLogin(on) }
                         launchAtLogin = model.launchAtLogin
                     }
-                Toggle("Require Touch ID to open this window", isOn: setting(\.requireTouchID))
-                Text("This only locks the window. It is not encryption: the data on disk is protected by its own keys either way.")
-                    .font(.caption).foregroundStyle(.secondary)
             }
 
             Section("Permissions") {

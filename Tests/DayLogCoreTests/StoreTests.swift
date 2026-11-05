@@ -8,7 +8,7 @@ final class StoreTests: XCTestCase {
         for d in dirs { try? FileManager.default.removeItem(at: d) }
     }
 
-    private func store(_ clock: ManualClock, keys: InMemoryKeyStore = InMemoryKeyStore()) throws -> DayLogStore {
+    private func store(_ clock: ManualClock, keys: KeyStore = InMemoryKeyStore()) throws -> DayLogStore {
         let dir = makeTempDir()
         dirs.append(dir)
         return try makeStore(clock: clock, keys: keys, dir: dir)
@@ -176,11 +176,46 @@ final class StoreTests: XCTestCase {
         try add(s, app("Chrome", title: "Docs", domain: "docs.rs"), start: t0.addingTimeInterval(300), minutes: 5)
         clock.advance(600)
         let rule = try s.addRule(type: .domain, pattern: "bank.com")
-        let matches = try s.segmentsMatching(rule)
-        XCTAssertEqual(matches.map(\.state.title), ["Bank statement"])
-        try s.deleteSegments(ids: matches.map(\.id))
+        let matches = try s.matches(for: rule)
+        XCTAssertEqual(matches.segments.map(\.state.title), ["Bank statement"])
+        try s.deleteMatches(matches)
         XCTAssertEqual(try s.liveSegments().map(\.state.title), ["Docs"])
         XCTAssertEqual(try s.rules().map(\.pattern), ["bank.com"])
+    }
+
+    func testRetroactiveDeleteAlsoRemovesOlderDomainTotals() throws {
+        let clock = ManualClock(t0)
+        let s = try store(clock)
+        try add(s, app("Chrome", domain: "online.bank.com"), start: t0, minutes: 10)
+        try add(s, app("Chrome", domain: "docs.rs"), start: t0.addingTimeInterval(600), minutes: 5)
+        clock.advance(49 * 3600)
+        try s.purge(retentionDays: 90)
+
+        let rule = try s.addRule(type: .domain, pattern: "bank.com")
+        let matches = try s.matches(for: rule)
+        XCTAssertTrue(matches.segments.isEmpty)
+        XCTAssertEqual(matches.domainTotalKeys, [try s.crypto.domainHMAC("online.bank.com")])
+        try s.deleteMatches(matches)
+        XCTAssertEqual(try s.breakdown(.domain, firstDay: t0, lastDay: t0), [BreakdownRow(label: "docs.rs", seconds: 300)])
+        XCTAssertEqual(try s.db.query("SELECT COUNT(*) FROM domain_labels") { $0.int(0) }.first, 1)
+    }
+
+    func testPurgeKeepsSegmentsWhenKeychainIsUnreadable() throws {
+        let clock = ManualClock(t0)
+        let keys = FailingKeyStore()
+        let s = try store(clock, keys: keys)
+        try add(s, app("Chrome", title: "Inbox", domain: "mail.google.com"), start: t0, minutes: 5)
+        clock.advance(49 * 3600)
+
+        keys.failReads = true
+        XCTAssertEqual(try s.segments(from: .distantPast, to: .distantFuture).first?.unavailable, true)
+        XCTAssertEqual(try s.purge(retentionDays: 90).segmentsRolledUp, 0)
+        XCTAssertEqual(try s.db.query("SELECT COUNT(*) FROM segments") { $0.int(0) }.first, 1)
+
+        // Once the keychain is readable again, the segment rolls up with its domain intact.
+        keys.failReads = false
+        XCTAssertEqual(try s.purge(retentionDays: 90).segmentsRolledUp, 1)
+        XCTAssertEqual(try s.breakdown(.domain, firstDay: t0, lastDay: t0), [BreakdownRow(label: "mail.google.com", seconds: 300)])
     }
 
     func testPreferencesRoundTrip() throws {

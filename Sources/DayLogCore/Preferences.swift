@@ -6,7 +6,6 @@ public struct Preferences: Equatable, Sendable {
     /// nil keeps daily totals forever.
     public var totalsRetentionDays: Int? = 90
     public var onboarded = false
-    public var requireTouchID = false
 
     public init() {}
 
@@ -28,7 +27,6 @@ extension DayLogStore {
         if let v = try value("idle_threshold").flatMap(Double.init), v >= 10 { s.idleThreshold = v }
         if let v = try value("totals_retention_days") { s.totalsRetentionDays = v == "forever" ? nil : Int(v).map { max(30, $0) } ?? 90 }
         if let v = try value("onboarded") { s.onboarded = v == "1" }
-        if let v = try value("require_touch_id") { s.requireTouchID = v == "1" }
         return s
     }
 
@@ -38,7 +36,8 @@ extension DayLogStore {
             try set("idle_threshold", String(s.idleThreshold))
             try set("totals_retention_days", s.totalsRetentionDays.map { String(max(30, $0)) } ?? "forever")
             try set("onboarded", s.onboarded ? "1" : "0")
-            try set("require_touch_id", s.requireTouchID ? "1" : "0")
+            // Left over from the removed Touch ID lock.
+            try db.run("DELETE FROM settings WHERE key = 'require_touch_id'")
         }
     }
 }

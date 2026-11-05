@@ -7,7 +7,7 @@ struct TimelineView: View {
     @State private var segments: [Segment] = []
     @State private var search = ""
     @State private var appFilter: String?
-    @State private var retroMatches: [Segment]?
+    @State private var retroMatches: RuleMatches?
     @State private var titleRuleDraft: TitleRuleDraft?
 
     private enum Item: Identifiable {
@@ -101,6 +101,8 @@ struct TimelineView: View {
                 }
                 if s.expired {
                     Text("[expired]").foregroundStyle(.secondary)
+                } else if s.unavailable {
+                    Text("[keychain unavailable]").foregroundStyle(.secondary)
                 } else if let t = s.state.title {
                     Text(t).foregroundStyle(.secondary).textSelection(.enabled)
                 }

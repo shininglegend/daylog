@@ -5,7 +5,7 @@ struct RulesView: View {
     @Environment(AppModel.self) private var model
     @State private var selection: Rule.ID?
     @State private var editing: RuleDraft?
-    @State private var retroMatches: [Segment]?
+    @State private var retroMatches: RuleMatches?
 
     var body: some View {
         VStack(alignment: .leading) {

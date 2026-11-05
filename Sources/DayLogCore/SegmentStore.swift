@@ -33,16 +33,18 @@ extension DayLogStore: SegmentSink {
         }
         return rows.map { r in
             var expired = false
+            var unavailable = false
             func open(_ box: Data?, _ field: Crypto.Field) -> String? {
                 guard let box else { return nil }
                 switch crypto.open(box, field: field, segmentStart: r.start) {
                 case .value(let s): return s
                 case .expired: expired = true; return nil
+                case .unavailable: unavailable = true; return nil
                 }
             }
             let state = ActivityState(bundleID: r.bundleID, appName: r.appName, title: open(r.title, .title),
                                       domain: open(r.domain, .domain), idle: r.idle, blocked: r.blocked)
-            return Segment(id: r.id, start: r.start, end: r.end, state: state, expired: expired)
+            return Segment(id: r.id, start: r.start, end: r.end, state: state, expired: expired, unavailable: unavailable)
         }
     }
 
@@ -52,9 +54,45 @@ extension DayLogStore: SegmentSink {
         return try segments(from: now.addingTimeInterval(-Self.liveWindow), to: now.addingTimeInterval(1))
     }
 
-    /// Retroactive cleanup for a new rule. Matching happens in memory on decrypted values.
-    public func segmentsMatching(_ rule: Rule) throws -> [Segment] {
+    /// Retroactive cleanup for a new rule: live segments it matches, plus rolled-up
+    /// domain totals whose (decrypted) label it matches. Matching happens in memory.
+    public func matches(for rule: Rule) throws -> RuleMatches {
         let matcher = RuleMatcher(rules: [rule])
-        return try liveSegments().filter { !$0.state.blocked && matcher.matches($0) }
+        let segments = try liveSegments().filter { !$0.state.blocked && matcher.matches($0) }
+        let labels = try db.query("SELECT hmac, label_box FROM domain_labels") { r in
+            (hmac: r.text(0) ?? "", box: r.blob(1))
+        }
+        let domainKeys = labels.compactMap { label -> String? in
+            guard let domain = label.box.flatMap({ crypto.openLabel($0) }),
+                  matcher.matches(bundleID: nil, title: nil, domain: domain)
+            else { return nil }
+            return label.hmac
+        }
+        return RuleMatches(segments: segments, domainTotalKeys: domainKeys)
     }
+
+    /// Deletes matched segments and the matched domains' totals and labels.
+    public func deleteMatches(_ matches: RuleMatches) throws {
+        try db.transaction {
+            for seg in matches.segments { try db.run("DELETE FROM segments WHERE id = ?", [seg.id]) }
+            for key in matches.domainTotalKeys {
+                try db.run("DELETE FROM daily_totals WHERE kind = 'domain' AND key = ?", [key])
+                try db.run("DELETE FROM domain_labels WHERE hmac = ?", [key])
+            }
+        }
+    }
+}
+
+/// What a new rule matches in already-recorded data.
+public struct RuleMatches: Equatable, Sendable {
+    public var segments: [Segment]
+    /// `daily_totals` keys (domain HMACs) of older website totals the rule matches.
+    public var domainTotalKeys: [String]
+
+    public init(segments: [Segment] = [], domainTotalKeys: [String] = []) {
+        self.segments = segments
+        self.domainTotalKeys = domainTotalKeys
+    }
+
+    public var isEmpty: Bool { segments.isEmpty && domainTotalKeys.isEmpty }
 }

@@ -35,6 +35,16 @@ final class CryptoTests: XCTestCase {
         XCTAssertEqual(crypto.open(box, field: .title, segmentStart: t0), .expired)
     }
 
+    func testKeychainErrorReadsUnavailableNotExpired() throws {
+        let keys = FailingKeyStore()
+        let crypto = Crypto(keys: keys)
+        let box = try crypto.seal("x", field: .title, segmentStart: t0)
+        keys.failReads = true
+        XCTAssertEqual(crypto.open(box, field: .title, segmentStart: t0), .unavailable)
+        keys.failReads = false
+        XCTAssertEqual(crypto.open(box, field: .title, segmentStart: t0), .value("x"))
+    }
+
     func testDomainHMACIsStableAndKeyed() throws {
         let crypto = Crypto(keys: InMemoryKeyStore())
         XCTAssertEqual(try crypto.domainHMAC("github.com"), try crypto.domainHMAC("github.com"))

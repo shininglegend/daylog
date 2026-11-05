@@ -42,7 +42,6 @@ targets:
     dependencies:
       - target: DayLogCore
       - sdk: ServiceManagement.framework
-      - sdk: LocalAuthentication.framework
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: local.daylog

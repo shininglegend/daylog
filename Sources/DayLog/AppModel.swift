@@ -1,6 +1,5 @@
 import AppKit
 import DayLogCore
-import LocalAuthentication
 import Observation
 import ServiceManagement
 import os
@@ -46,16 +45,19 @@ final class AppModel {
     /// Bumped on every poll and data change; views reload with `.task(id: revision)`.
     private(set) var revision = 0
     var errorMessage: String?
-    /// Touch ID gate for the main window (UI-only, not cryptographic).
-    var mainWindowUnlocked = false
 
     /// `DAYLOG_CLOCK_OFFSET_HOURS=49` shifts the app's clock forward, for testing the purge.
+    /// Debug builds only: in Release an environment variable must not be able to shred
+    /// recent data (positive offset) or keep detail past 48 hours (negative offset).
     static func makeClock() -> Clock {
-        guard let raw = ProcessInfo.processInfo.environment["DAYLOG_CLOCK_OFFSET_HOURS"],
-              let hours = Double(raw), hours != 0
-        else { return SystemClock() }
-        log.notice("clock offset by \(hours, privacy: .public) hours")
-        return OffsetClock(offset: hours * 3600)
+        #if DEBUG
+        if let raw = ProcessInfo.processInfo.environment["DAYLOG_CLOCK_OFFSET_HOURS"],
+           let hours = Double(raw), hours != 0 {
+            log.notice("clock offset by \(hours, privacy: .public) hours")
+            return OffsetClock(offset: hours * 3600)
+        }
+        #endif
+        return SystemClock()
     }
 
     init(keys: KeyStore = KeychainKeyStore(), clock: Clock = AppModel.makeClock()) throws {
@@ -130,26 +132,34 @@ final class AppModel {
         }
     }
 
-    /// Adds a rule and returns the live segments it matches, for the retroactive-cleanup prompt.
+    /// Deletes what a new rule matched: live entries and older website totals.
+    func deleteMatches(_ matches: RuleMatches) {
+        perform("Delete") {
+            recorder.segmentsDeleted(ids: Set(matches.segments.map(\.id)))
+            try store.deleteMatches(matches)
+        }
+    }
+
+    /// Adds a rule and returns the recorded data it matches, for the retroactive-cleanup prompt.
     @discardableResult
-    func addRule(type: RuleType, pattern: String) -> [Segment] {
-        var matches: [Segment] = []
+    func addRule(type: RuleType, pattern: String) -> RuleMatches {
+        var matches = RuleMatches()
         perform("Add rule") {
             let rule = try store.addRule(type: type, pattern: pattern)
             rules = try store.rules()
             recorder.rulesChanged(rules)
-            matches = try store.segmentsMatching(rule)
+            matches = try store.matches(for: rule)
         }
         return matches
     }
 
-    func updateRule(_ rule: Rule) -> [Segment] {
-        var matches: [Segment] = []
+    func updateRule(_ rule: Rule) -> RuleMatches {
+        var matches = RuleMatches()
         perform("Update rule") {
             try store.updateRule(rule)
             rules = try store.rules()
             recorder.rulesChanged(rules)
-            matches = try store.segmentsMatching(rule)
+            matches = try store.matches(for: rule)
         }
         return matches
     }
@@ -186,31 +196,38 @@ final class AppModel {
     // MARK: Delete all data
 
     /// Removes the database and every `local.daylog.*` keychain item, then starts fresh.
+    /// The store and recorder are reopened even if deletion fails partway, so the app
+    /// never keeps running on a closed database.
     func deleteAllData() {
+        let wasPaused = recorder.pausedUntil
+        recorder.shutdown()
+        store.db.close()
         perform("Delete all data") {
-            let wasPaused = recorder.pausedUntil
-            recorder.shutdown()
-            store.db.close()
+            defer { reopenStore(pausedUntil: wasPaused) }
             try DayLogStore.deleteAllData(directory: store.directory, keys: keys)
-            store = try DayLogStore(keys: keys, clock: clock)
-            var fresh = Preferences()
-            fresh.onboarded = true
-            try store.savePreferences(fresh)
-            settings = fresh
-            rules = []
-            recorder = Recorder(store: store, settings: fresh)
-            startRecorder()
-            if let wasPaused { recorder.pause(until: wasPaused) }
         }
     }
 
-    // MARK: Touch ID
-
-    func unlockMainWindow() {
-        Task {
-            let ok = (try? await LAContext().evaluatePolicy(.deviceOwnerAuthentication, localizedReason: "show your DayLog activity")) ?? false
-            if ok { mainWindowUnlocked = true }
+    /// Opens the store again and restarts recording. Settings and rules are reloaded from
+    /// disk because a failed delete may have left the old database in place.
+    private func reopenStore(pausedUntil: Date?) {
+        do {
+            store = try DayLogStore(keys: keys, clock: clock)
+            var s = (try? store.loadPreferences()) ?? Preferences()
+            if !s.onboarded {
+                s.onboarded = true
+                try store.savePreferences(s)
+            }
+            settings = s
+            rules = (try? store.rules()) ?? []
+        } catch {
+            Self.log.error("Reopening the database failed: \(String(describing: error), privacy: .public)")
+            errorMessage = "Reopening the database failed: \(error). Quit and relaunch DayLog."
+            return
         }
+        recorder = Recorder(store: store, settings: settings)
+        startRecorder()
+        if let pausedUntil { recorder.pause(until: pausedUntil) }
     }
 
     func completeOnboarding() {

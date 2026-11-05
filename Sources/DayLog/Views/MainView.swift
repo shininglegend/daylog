@@ -8,9 +8,7 @@ struct MainView: View {
 
     var body: some View {
         Group {
-            if model.settings.requireTouchID && !model.mainWindowUnlocked {
-                LockedView()
-            } else if !model.settings.onboarded {
+            if !model.settings.onboarded {
                 OnboardingView()
             } else {
                 VStack(spacing: 0) {
@@ -35,20 +33,5 @@ struct MainView: View {
         } message: {
             Text(model.errorMessage ?? "")
         }
-    }
-}
-
-private struct LockedView: View {
-    @Environment(AppModel.self) private var model
-
-    var body: some View {
-        VStack(spacing: 16) {
-            Image(systemName: "lock.fill").font(.system(size: 40)).foregroundStyle(.secondary)
-            Text("DayLog is locked").font(.title2)
-            Button("Unlock with Touch ID") { model.unlockMainWindow() }
-                .keyboardShortcut(.defaultAction)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .onAppear { model.unlockMainWindow() }
     }
 }

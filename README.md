@@ -18,6 +18,16 @@ Prerequisites: Xcode (tested with 27.2) and [XcodeGen](https://github.com/yonask
 
 The script generates `DayLog.xcodeproj` from `project.yml`, runs the unit tests, builds Release, runs the no-network check (`scripts/check-no-network.sh`), and verifies the signature, hardened runtime, and Apple Events entitlement. The result is `build/DayLog.app`. Copy it to `/Applications` for daily use; launch at login works best from there.
 
+### Updating
+
+```sh
+git pull                                # or make your changes
+./build.sh "DayLog Local Signing"
+./scripts/install.sh                    # quits DayLog, replaces /Applications/DayLog.app, relaunches
+```
+
+Your data and keychain keys live outside the app, so updates keep them. Permission grants carry over as long as you sign with the same certificate; `install.sh` warns before installing a build signed differently. To mark a release, bump `MARKETING_VERSION` (and `CURRENT_PROJECT_VERSION`) in `project.yml`, commit, and tag it (`git tag v1.1`).
+
 `./build.sh -` signs ad-hoc. That's fine for a quick try, but macOS ties permission grants and keychain access to the signature. With ad-hoc signing, every rebuild loses the Accessibility and Automation grants and triggers keychain prompts. Use a stable identity for anything longer.
 
 ### Working in Xcode
@@ -53,7 +63,7 @@ Notarization isn't needed for an app you build and run yourself.
 | Permission | Why | If denied |
 |---|---|---|
 | Accessibility | Read the focused window's title (`AXTitle`). | Only app names are recorded. The menu bar icon shows a warning triangle. |
-| Automation → Google Chrome | Ask Chrome for the front window's mode and active tab URL. Only the hostname is kept (with `www.` stripped); the URL is never written to disk. | Domains aren't recorded. Chrome window titles are dropped too, because DayLog can't tell whether a window is incognito. A banner explains how to turn it on. |
+| Automation → Google Chrome | Ask Chrome for the front window's mode, active tab URL, and tab title. Only the hostname is kept (with `www.` stripped); the URL is never written to disk. | Domains aren't recorded. Chrome tab titles are dropped too, because DayLog can't tell whether a window is incognito. A banner explains how to turn it on. |
 
 The first run shows an explanation and doesn't record until you click **Start Recording**. macOS asks for Chrome Automation the first time Chrome is in front while recording. Settings → Permissions shows the status of both and opens the right System Settings pane.
 
@@ -62,14 +72,15 @@ The first run shows an explanation and doesn't record until you click **Start Re
 - **Capture:** Every 5 seconds (configurable), DayLog reads the frontmost app, the focused window's title, and the Chrome domain when Chrome is in front, then applies block rules. After 2 minutes without input (configurable), time is recorded as idle and back-dated to the last input.
 - **Not recording:** Nothing is recorded while the screen is locked, the Mac is asleep, you've switched to another user, or recording is paused (15 minutes, 1 hour, or until resumed). These periods show as gaps in the timeline.
 - **Segments:** One row is kept open while app, title, domain, idle, and blocked are unchanged. Its end time is written at least every 60 seconds, so a crash loses at most a minute.
-- **Incognito:** If Chrome reports the front window is incognito, both title and domain are stored as empty.
-- **Block rules:** Rules can match an app (bundle ID), a domain (including subdomains), a title substring (case-insensitive), or a title regex. They're applied at capture time: matching time is stored as "Blocked" with no bundle ID, title, or domain. When you add a rule, DayLog offers to delete existing entries it matches. You can also right-click any timeline entry to block or delete it.
+- **Minimum duration:** Activity is recorded only once it has lasted 10 seconds. Anything shorter is never written. If you switch away briefly and come back, the earlier entry just continues; otherwise the short span is left unrecorded.
+- **Incognito and private windows:** Chrome titles come from Chrome itself, in the same Apple Events reply that reports the window's mode, and are kept only for normal windows. Incognito windows store no title or domain. Other browsers (Safari, Firefox, Arc, Brave, Edge, Chrome Beta/Canary, and others) can't report private windows, so only their app name is recorded, never their window titles.
+- **Block rules:** Rules can match an app (bundle ID), a domain (including subdomains), a title substring (case-insensitive), or a title regex. They're applied at capture time: matching time is stored as "Blocked" with no bundle ID, title, or domain. When you add a rule, DayLog offers to delete existing entries it matches from the last 48 hours, and, for domain rules, older website totals for the matching domains. Older per-app totals aren't changed. You can also right-click any timeline entry to block or delete it.
 
 ## Data
 
 - **Location:** `~/Library/Application Support/DayLog.noindex/daylog.sqlite`. The `.noindex` suffix keeps it out of Spotlight. The directory is mode `0700` and the database `0600`. The directory is excluded from Time Machine; check with `tmutil isexcluded ~/Library/Application\ Support/DayLog.noindex`.
 - **Keychain:** Generic-password items in your login keychain named `local.daylog.seg.<yyyyMMddHH>` (one key per UTC hour) and `local.daylog.totals`.
-- **Retention:** Purges run at launch, on wake, and hourly. Each purge rolls entries that ended more than 48 hours ago into `daily_totals` (idle excluded, blocked time counted as "Blocked"), deletes them, deletes the hour keys no remaining entry needs, and vacuums the database. Daily totals are kept 90 days by default (30 days to forever, in Settings).
+- **Retention:** Purges run at launch, on wake, and hourly. Each purge rolls entries that ended more than 48 hours ago into `daily_totals` (idle excluded, blocked time counted as "Blocked"), deletes them, deletes the hour keys no remaining entry needs, and vacuums the database. If the keychain can't be read (locked, or a keychain prompt was denied), entries it can't decrypt are left in place and rolled up by a later purge, so their details aren't lost. Daily totals are kept 90 days by default (30 days to forever, in Settings).
 - **Totals:** Domain totals are keyed by `HMAC-SHA256(totalsKey, domain)`. The readable domain names live in `domain_labels`, encrypted with the totals key, and are deleted when their last total expires. App names and bundle IDs are stored in plaintext.
 - **Delete all data:** Settings → **Delete All Data…** removes the database folder and every `local.daylog.*` keychain item.
 
@@ -96,7 +107,7 @@ The tests cover segment state transitions, rule matching, domain extraction (inc
 
 ## Manual test checklist
 
-- [ ] **Accessibility granted:** Titles appear in the timeline.
+- [x] **Accessibility granted:** Titles appear in the timeline.
 - [ ] **Accessibility denied:** Remove DayLog in System Settings → Privacy & Security → Accessibility. Only app names are recorded, and the icon shows a warning triangle.
 - [ ] **Chrome Automation granted:** Domains appear for Chrome entries.
 - [ ] **Chrome Automation denied:** Turn it off in Privacy & Security → Automation. The banner appears, recording continues, and Chrome entries have no domain or title.
@@ -105,7 +116,7 @@ The tests cover segment state transitions, rule matching, domain extraction (inc
 - [ ] **Chrome incognito:** Entries for an incognito window have no title or domain.
 - [ ] **Block rule, live:** Add a rule for something you're using. New time records as "Blocked".
 - [ ] **Block rule, retroactive:** Accept the prompt. Matching entries disappear from the timeline.
-- [ ] **48h purge:** Quit DayLog and relaunch with the clock moved forward: `DAYLOG_CLOCK_OFFSET_HOURS=49 /Applications/DayLog.app/Contents/MacOS/DayLog`. Earlier entries disappear from the timeline but still count in Breakdown, and their `local.daylog.seg.*` keychain items are gone. Entries recorded in this mode carry future timestamps, so use Delete All Data afterwards.
+- [ ] **48h purge:** Quit DayLog and relaunch a **Debug** build with the clock moved forward: `DAYLOG_CLOCK_OFFSET_HOURS=49 path/to/Debug/DayLog.app/Contents/MacOS/DayLog`. Release builds ignore this variable. Earlier entries disappear from the timeline but still count in Breakdown, and their `local.daylog.seg.*` keychain items are gone. Entries recorded in this mode carry future timestamps, so use Delete All Data afterwards.
 - [ ] **Time Machine:** `tmutil isexcluded ~/Library/Application\ Support/DayLog.noindex` prints `[Excluded]`.
 - [ ] **No network:** [LuLu](https://objective-see.org/products/lulu.html) shows zero connection attempts from DayLog over a day of use.
 
@@ -121,5 +132,4 @@ These are choices PLAN.md left open.
 - **Idle:** Idle time is stored as entries without app, title, or domain, shown as gaps and excluded from totals. Paused, locked, asleep, and switched-out time has no entries at all.
 - **Missed polls:** If polls stop for more than 30 seconds (or 3× the poll interval) without a sleep or lock notification, the open entry ends at the last poll instead of stretching over the gap.
 - **Main window:** AppKit-managed, so it can open at first launch and from the popover in an app with no Dock icon.
-- **Touch ID lock:** Optional (Settings), off by default. It only locks the window; it's not encryption.
 - **Logging:** `os_log` records only counts, states, and error codes, never titles, URLs, or domains.

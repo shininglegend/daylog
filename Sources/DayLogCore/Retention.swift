@@ -20,7 +20,9 @@ extension DayLogStore {
 
         try db.transaction {
             let all = try segments(from: .distantPast, to: .distantFuture)
-            let rollable = all.filter { $0.end <= cutoff || $0.expired }
+            // Segments the keychain couldn't decrypt right now are left for a later purge;
+            // rolling them up would permanently drop their title and domain.
+            let rollable = all.filter { !$0.unavailable && ($0.end <= cutoff || $0.expired) }
             for seg in rollable {
                 try rollUp(seg)
             }

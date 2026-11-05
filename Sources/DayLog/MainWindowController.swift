@@ -3,11 +3,8 @@ import SwiftUI
 
 /// The main window is AppKit-managed so it can be opened at first launch and
 /// from the popover regardless of SwiftUI scene state in a Dock-less app.
-final class MainWindowController: NSWindowController, NSWindowDelegate {
-    private let model: AppModel
-
+final class MainWindowController: NSWindowController {
     init(model: AppModel, openMainWindow: @escaping () -> Void) {
-        self.model = model
         let root = MainView()
             .environment(model)
             .environment(\.openMainWindow, OpenMainWindowAction(action: openMainWindow))
@@ -19,7 +16,6 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
         window.center()
         window.setFrameAutosaveName("DayLogMain")
         super.init(window: window)
-        window.delegate = self
     }
 
     @available(*, unavailable)
@@ -29,9 +25,5 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
         showWindow(nil)
         window?.makeKeyAndOrderFront(nil)
         NSApp.activate()
-    }
-
-    func windowWillClose(_ notification: Notification) {
-        model.mainWindowUnlocked = false
     }
 }

@@ -21,10 +21,19 @@ public final class Crypto {
         case value(String)
         /// The hour key was purged (crypto-shredded) or the box is corrupt.
         case expired
+        /// The keychain couldn't be read (locked, access denied, other error).
+        /// The key may still exist, so the data must not be treated as expired.
+        case unavailable
     }
 
     public func open(_ box: Data, field: Field, segmentStart: Date) -> OpenResult {
-        guard let key = try? keys.key(named: KeyNames.segmentKey(for: segmentStart)),
+        let key: SymmetricKey?
+        do {
+            key = try keys.key(named: KeyNames.segmentKey(for: segmentStart))
+        } catch {
+            return .unavailable
+        }
+        guard let key,
               let sealed = try? AES.GCM.SealedBox(combined: box),
               let data = try? AES.GCM.open(sealed, using: key, authenticating: Data(field.rawValue.utf8)),
               let s = String(data: data, encoding: .utf8)
