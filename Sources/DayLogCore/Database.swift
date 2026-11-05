@@ -150,7 +150,9 @@ public final class Database {
 }
 
 enum Schema {
-    static let version: Int64 = 1
+    /// Every statement is `IF NOT EXISTS`, so bumping the version applies new tables
+    /// to existing databases. 2: notes.
+    static let version: Int64 = 2
 
     static func migrate(_ db: Database) throws {
         let current = try db.query("PRAGMA user_version") { $0.int(0) }.first ?? 0
@@ -191,6 +193,13 @@ enum Schema {
                 key TEXT PRIMARY KEY,
                 value TEXT NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS notes (
+                id INTEGER PRIMARY KEY,
+                start REAL NOT NULL,
+                "end" REAL NOT NULL,
+                text BLOB NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS notes_start ON notes(start);
             PRAGMA user_version = \(version);
             """)
         }

@@ -117,6 +117,10 @@ final class AppModel {
         (try? store.liveSegments()) ?? []
     }
 
+    func liveNotes() -> [Note] {
+        (try? store.liveNotes()) ?? []
+    }
+
     func breakdown(_ kind: BreakdownKind, firstDay: Date, lastDay: Date) -> [BreakdownRow] {
         (try? store.breakdown(kind, firstDay: firstDay, lastDay: lastDay)) ?? []
     }
@@ -130,6 +134,23 @@ final class AppModel {
             recorder.segmentsDeleted(ids: Set(ids))
             try store.deleteSegments(ids: ids)
         }
+    }
+
+    /// Adds, updates, or (when `text` is blank) deletes the note on a time range.
+    func saveNote(_ existing: Note?, start: Date, end: Date, text: String) {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        perform("Save note") {
+            switch (existing, trimmed.isEmpty) {
+            case (let note?, true): try store.deleteNote(id: note.id)
+            case (let note?, false): try store.updateNote(note, text: trimmed)
+            case (nil, false): try store.addNote(start: start, end: end, text: trimmed)
+            case (nil, true): break
+            }
+        }
+    }
+
+    func deleteNote(_ note: Note) {
+        perform("Delete note") { try store.deleteNote(id: note.id) }
     }
 
     /// Deletes what a new rule matched: live entries and older website totals.

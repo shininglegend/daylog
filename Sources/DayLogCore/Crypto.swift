@@ -3,7 +3,7 @@ import Foundation
 
 /// Column encryption for segments and the domain totals HMAC.
 public final class Crypto {
-    public enum Field: String { case title, domain }
+    public enum Field: String { case title, domain, note }
 
     private let keys: KeyStore
 

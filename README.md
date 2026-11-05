@@ -72,6 +72,7 @@ The first run shows an explanation and doesn't record until you click **Start Re
 - **Capture:** Every 5 seconds (configurable), DayLog reads the frontmost app, the focused window's title, and the Chrome domain when Chrome is in front, then applies block rules. After 2 minutes without input (configurable), time is recorded as idle and back-dated to the last input.
 - **Not recording:** Nothing is recorded while the screen is locked, the Mac is asleep, you've switched to another user, or recording is paused (15 minutes, 1 hour, or until resumed). These periods show as gaps in the timeline.
 - **Segments:** One row is kept open while app, title, domain, idle, and blocked are unchanged. Its end time is written at least every 60 seconds, so a crash loses at most a minute.
+- **Notes on gaps:** Click the pencil on any "Idle" or "Not recording" gap in the timeline (or right-click it) to note what you were doing, like "Call with Jim". Notes are encrypted with the hour key, show up in search, never affect totals, and are deleted after 48 hours along with the entries around them.
 - **Minimum duration:** Activity is recorded only once it has lasted 10 seconds. Anything shorter is never written. If you switch away briefly and come back, the earlier entry just continues; otherwise the short span is left unrecorded.
 - **Incognito and private windows:** Chrome titles come from Chrome itself, in the same Apple Events reply that reports the window's mode, and are kept only for normal windows. Incognito windows store no title or domain. Other browsers (Safari, Firefox, Arc, Brave, Edge, Chrome Beta/Canary, and others) can't report private windows, so only their app name is recorded, never their window titles.
 - **Block rules:** Rules can match an app (bundle ID), a domain (including subdomains), a title substring (case-insensitive), or a title regex. They're applied at capture time: matching time is stored as "Blocked" with no bundle ID, title, or domain. When you add a rule, DayLog offers to delete existing entries it matches from the last 48 hours, and, for domain rules, older website totals for the matching domains. Older per-app totals aren't changed. You can also right-click any timeline entry to block or delete it.
@@ -109,7 +110,7 @@ The tests cover segment state transitions, rule matching, domain extraction (inc
 
 - [x] **Accessibility granted:** Titles appear in the timeline.
 - [ ] **Accessibility denied:** Remove DayLog in System Settings → Privacy & Security → Accessibility. Only app names are recorded, and the icon shows a warning triangle.
-- [ ] **Chrome Automation granted:** Domains appear for Chrome entries.
+- [x] A**nyChrome Automation granted:** Domains appear for Chrome entries.
 - [ ] **Chrome Automation denied:** Turn it off in Privacy & Security → Automation. The banner appears, recording continues, and Chrome entries have no domain or title.
 - [ ] **Lock and unlock:** Lock the screen for over a minute. A "Not recording" gap appears.
 - [ ] **Sleep and wake:** Same as lock: a gap appears, and a purge runs on wake.

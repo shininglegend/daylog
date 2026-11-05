@@ -218,6 +218,48 @@ final class StoreTests: XCTestCase {
         XCTAssertEqual(try s.breakdown(.domain, firstDay: t0, lastDay: t0), [BreakdownRow(label: "mail.google.com", seconds: 300)])
     }
 
+    func testNotesRoundTripUpdateAndDelete() throws {
+        let clock = ManualClock(t0.addingTimeInterval(7200))
+        let s = try store(clock)
+        let note = try s.addNote(start: t0, end: t0.addingTimeInterval(3600), text: "Call with Jim")
+        XCTAssertEqual(try s.liveNotes().map(\.text), ["Call with Jim"])
+        XCTAssertTrue(try s.liveNotes()[0].overlaps(start: t0.addingTimeInterval(600), end: t0.addingTimeInterval(1200)))
+        try s.updateNote(note, text: "Lunch")
+        XCTAssertEqual(try s.liveNotes().map(\.text), ["Lunch"])
+        try s.deleteNote(id: note.id)
+        XCTAssertTrue(try s.liveNotes().isEmpty)
+    }
+
+    func testPurgeDeletesOldNotesAndKeepsKeysForLiveOnes() throws {
+        let clock = ManualClock(t0)
+        let keys = InMemoryKeyStore()
+        let s = try store(clock, keys: keys)
+        try s.addNote(start: t0, end: t0.addingTimeInterval(1800), text: "old")
+        clock.advance(49 * 3600)
+        let recent = clock.now.addingTimeInterval(-600)
+        try s.addNote(start: recent, end: clock.now, text: "recent")
+
+        let report = try s.purge(retentionDays: 90)
+        XCTAssertEqual(report.notesDeleted, 1)
+        XCTAssertEqual(try s.notes(from: .distantPast, to: .distantFuture).map(\.text), ["recent"])
+        XCTAssertNil(try keys.key(named: KeyNames.segmentKey(for: t0)))
+        XCTAssertNotNil(try keys.key(named: KeyNames.segmentKey(for: recent)))
+        // Notes never feed totals.
+        XCTAssertEqual(try s.db.query("SELECT COUNT(*) FROM daily_totals") { $0.int(0) }.first, 0)
+    }
+
+    func testPurgeKeepsNotesWhenKeychainIsUnreadable() throws {
+        let clock = ManualClock(t0)
+        let keys = FailingKeyStore()
+        let s = try store(clock, keys: keys)
+        try s.addNote(start: t0, end: t0.addingTimeInterval(600), text: "x")
+        clock.advance(49 * 3600)
+        keys.failReads = true
+        XCTAssertEqual(try s.purge(retentionDays: 90).notesDeleted, 0)
+        keys.failReads = false
+        XCTAssertEqual(try s.purge(retentionDays: 90).notesDeleted, 1)
+    }
+
     func testPreferencesRoundTrip() throws {
         let s = try store(ManualClock(t0))
         XCTAssertEqual(try s.loadPreferences(), Preferences())
@@ -232,9 +274,10 @@ final class StoreTests: XCTestCase {
     func testDatabaseFileContainsNoPlaintextTitlesOrDomains() throws {
         let clock = ManualClock(t0)
         let s = try store(clock)
-        let secrets = ["ZebraConfidentialTitle", "zebra-secret-site.example", "PlaintextCanaryXYZ"]
+        let secrets = ["ZebraConfidentialTitle", "zebra-secret-site.example", "PlaintextCanaryXYZ", "SecretNoteCanary"]
         try add(s, app("Chrome", title: secrets[0], domain: secrets[1]), start: t0, minutes: 5)
         try add(s, app("Notes", title: secrets[2]), start: t0.addingTimeInterval(300), minutes: 5)
+        try s.addNote(start: t0.addingTimeInterval(600), end: t0.addingTimeInterval(900), text: secrets[3])
         // Roll half the data into totals so both tables are exercised.
         clock.advance(49 * 3600)
         try s.purge(retentionDays: 90)

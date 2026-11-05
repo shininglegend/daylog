@@ -5,6 +5,7 @@ public struct PurgeReport: Equatable, Sendable {
     public var keysDeleted = 0
     public var totalsDeleted = 0
     public var labelsDeleted = 0
+    public var notesDeleted = 0
 }
 
 extension DayLogStore {
@@ -29,6 +30,12 @@ extension DayLogStore {
             for seg in rollable { try db.run("DELETE FROM segments WHERE id = ?", [seg.id]) }
             report.segmentsRolledUp = rollable.count
 
+            // Notes are detail like titles: deleted after 48h, never rolled up.
+            let staleNotes = try notes(from: .distantPast, to: .distantFuture)
+                .filter { !$0.unavailable && ($0.end <= cutoff || $0.expired) }
+            for note in staleNotes { try deleteNote(id: note.id) }
+            report.notesDeleted = staleNotes.count
+
             if let days = retentionDays {
                 let oldest = calendar.date(byAdding: .day, value: -days, to: calendar.startOfDay(for: now))!
                 report.totalsDeleted = try db.run("DELETE FROM daily_totals WHERE day < ?", [dayKey(oldest)])
@@ -38,7 +45,7 @@ extension DayLogStore {
         }
 
         // Crypto-shred: drop hour keys no remaining segment needs, once the hour is past the cutoff.
-        let liveHours = Set(try db.query("SELECT start FROM segments") {
+        let liveHours = Set(try db.query("SELECT start FROM segments UNION ALL SELECT start FROM notes") {
             KeyNames.segmentKey(for: Date(timeIntervalSince1970: $0.double(0)))
         })
         for name in try keys.allKeyNames() {
@@ -49,10 +56,10 @@ extension DayLogStore {
             report.keysDeleted += 1
         }
 
-        if report.segmentsRolledUp > 0 || report.totalsDeleted > 0 || report.labelsDeleted > 0 {
+        if report.segmentsRolledUp > 0 || report.totalsDeleted > 0 || report.labelsDeleted > 0 || report.notesDeleted > 0 {
             try db.vacuum()
         }
-        log.info("purge: rolled up \(report.segmentsRolledUp) segments, deleted \(report.keysDeleted) keys, \(report.totalsDeleted) totals")
+        log.info("purge: rolled up \(report.segmentsRolledUp) segments, deleted \(report.notesDeleted) notes, \(report.keysDeleted) keys, \(report.totalsDeleted) totals")
         return report
     }
 
