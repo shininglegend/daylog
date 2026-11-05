@@ -49,7 +49,16 @@ final class AppModel {
     /// Touch ID gate for the main window (UI-only, not cryptographic).
     var mainWindowUnlocked = false
 
-    init(keys: KeyStore = KeychainKeyStore(), clock: Clock = SystemClock()) throws {
+    /// `DAYLOG_CLOCK_OFFSET_HOURS=49` shifts the app's clock forward, for testing the purge.
+    static func makeClock() -> Clock {
+        guard let raw = ProcessInfo.processInfo.environment["DAYLOG_CLOCK_OFFSET_HOURS"],
+              let hours = Double(raw), hours != 0
+        else { return SystemClock() }
+        log.notice("clock offset by \(hours, privacy: .public) hours")
+        return OffsetClock(offset: hours * 3600)
+    }
+
+    init(keys: KeyStore = KeychainKeyStore(), clock: Clock = AppModel.makeClock()) throws {
         self.keys = keys
         self.clock = clock
         let store = try DayLogStore(keys: keys, clock: clock)

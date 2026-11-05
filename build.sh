@@ -6,7 +6,7 @@ set -euo pipefail
 if [[ $# -lt 1 ]]; then
   echo "usage: $0 \"<code signing identity>\"   (\"-\" = ad-hoc)" >&2
   echo "available identities:" >&2
-  security find-identity -v -p codesigning >&2 || true
+  security find-identity -p codesigning >&2 || true
   exit 64
 fi
 IDENTITY="$1"

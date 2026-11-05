@@ -137,11 +137,15 @@ final class Recorder: NSObject {
         var title = accessibilityGranted ? Self.focusedWindowTitle(pid: app.processIdentifier) : nil
         var domain: String?
         if app.bundleIdentifier == ChromeProbe.bundleID {
+            // Chrome titles are kept only when Chrome confirms the window isn't incognito.
             switch chrome.probe() {
             case .domain(let d): domain = d; chromeDenied = false
             case .incognito: domain = nil; title = nil; chromeDenied = false
-            case .denied: chromeDenied = true
-            case .unavailable: break
+            case .denied:
+                chromeDenied = true
+                title = nil
+            case .unavailable:
+                title = nil
             }
         }
         return Capture(bundleID: app.bundleIdentifier, appName: app.localizedName, title: title, domain: domain)

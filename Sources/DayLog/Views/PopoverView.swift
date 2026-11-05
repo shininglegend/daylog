@@ -98,7 +98,7 @@ struct PermissionBanners: View {
             }
         }
         if model.chromeDenied {
-            Banner(text: "Chrome websites aren't recorded because Automation for Google Chrome is off. Turn on DayLog → Google Chrome in Privacy & Security → Automation.",
+            Banner(text: "Chrome websites and tab titles aren't recorded because Automation for Google Chrome is off. Turn on DayLog → Google Chrome in Privacy & Security → Automation.",
                    button: "Open Settings") {
                 Permissions.openAutomationSettings()
             }

@@ -16,3 +16,11 @@ public final class ManualClock: Clock {
     public init(_ now: Date) { self.now = now }
     public func advance(_ seconds: TimeInterval) { now = now.addingTimeInterval(seconds) }
 }
+
+/// System time shifted by a fixed offset. Used to simulate the 48h purge
+/// in the real app (see README, `DAYLOG_CLOCK_OFFSET_HOURS`).
+public final class OffsetClock: Clock {
+    public let offset: TimeInterval
+    public init(offset: TimeInterval) { self.offset = offset }
+    public var now: Date { Date().addingTimeInterval(offset) }
+}
