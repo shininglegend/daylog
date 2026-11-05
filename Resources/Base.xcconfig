@@ -1,0 +1,6 @@
+// Shared signing defaults. Copy Local.xcconfig.example to Local.xcconfig
+// (gitignored) to set a stable identity for Xcode GUI builds.
+CODE_SIGN_STYLE = Manual
+CODE_SIGN_IDENTITY = -
+DEVELOPMENT_TEAM =
+#include? "../Local.xcconfig"

@@ -1,0 +1,84 @@
+name: DayLog
+minimumXcodeGenVersion: 2.46.0
+options:
+  bundleIdPrefix: local
+  deploymentTarget:
+    macOS: "14.0"
+  createIntermediateGroups: true
+configFiles:
+  Debug: Resources/Base.xcconfig
+  Release: Resources/Base.xcconfig
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    MACOSX_DEPLOYMENT_TARGET: "14.0"
+    ENABLE_HARDENED_RUNTIME: YES
+    ENABLE_APP_SANDBOX: NO
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+    MARKETING_VERSION: "1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    DEAD_CODE_STRIPPING: YES
+targets:
+  DayLogCore:
+    type: framework
+    platform: macOS
+    sources: [Sources/DayLogCore]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: local.daylog.core
+        GENERATE_INFOPLIST_FILE: YES
+        SKIP_INSTALL: YES
+        DEFINES_MODULE: YES
+    dependencies:
+      - sdk: libsqlite3.tbd
+      - sdk: Security.framework
+      - sdk: CryptoKit.framework
+
+  DayLog:
+    type: application
+    platform: macOS
+    sources: [Sources/DayLog]
+    dependencies:
+      - target: DayLogCore
+        embed: true
+      - sdk: ServiceManagement.framework
+      - sdk: LocalAuthentication.framework
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: local.daylog
+        PRODUCT_NAME: DayLog
+        GENERATE_INFOPLIST_FILE: YES
+        CODE_SIGN_ENTITLEMENTS: Resources/DayLog.entitlements
+        INFOPLIST_KEY_LSUIElement: YES
+        INFOPLIST_KEY_CFBundleDisplayName: DayLog
+        INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.productivity
+        INFOPLIST_KEY_NSAppleEventsUsageDescription: "DayLog reads the active tab's address in Google Chrome to record which website you are using. Only the domain is stored, encrypted, on this Mac."
+        INFOPLIST_KEY_NSHumanReadableCopyright: ""
+        COMBINE_HIDPI_IMAGES: YES
+        SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
+
+  DayLogCoreTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources: [Tests/DayLogCoreTests]
+    dependencies:
+      - target: DayLogCore
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: local.daylog.core.tests
+        GENERATE_INFOPLIST_FILE: YES
+
+schemes:
+  DayLog:
+    build:
+      targets:
+        DayLog: all
+        DayLogCore: all
+        DayLogCoreTests: [test]
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets: [DayLogCoreTests]
+    archive:
+      config: Release

@@ -1,0 +1,2 @@
+// Copy to Local.xcconfig and set to the name of your code-signing certificate.
+CODE_SIGN_IDENTITY = DayLog Local Signing
