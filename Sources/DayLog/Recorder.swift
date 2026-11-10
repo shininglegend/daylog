@@ -158,21 +158,41 @@ final class Recorder: NSObject {
             case .unavailable: break
             }
         } else if accessibilityGranted, !Self.unverifiableBrowsers.contains(app.bundleIdentifier ?? "") {
-            title = Self.focusedWindowTitle(pid: app.processIdentifier)
+            title = TitleNormalizer.normalize(Self.focusedWindowTitle(pid: app.processIdentifier))
         }
         return Capture(bundleID: app.bundleIdentifier, appName: app.localizedName, title: title, domain: domain)
     }
 
+    /// Window subroles for dialogs and panels that sit in front of the document being worked on.
+    private static let auxiliarySubroles: Set<String> = [
+        kAXDialogSubrole as String, kAXSystemDialogSubrole as String, kAXFloatingWindowSubrole as String,
+    ]
+
+    /// The focused window's title, or the main (document) window's when a dialog or panel
+    /// has focus, so e.g. InDesign's "Paragraph Style Options" counts as the document.
     private static func focusedWindowTitle(pid: pid_t) -> String? {
         let appElement = AXUIElementCreateApplication(pid)
         AXUIElementSetMessagingTimeout(appElement, 0.5)
-        var window: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(appElement, kAXFocusedWindowAttribute as CFString, &window) == .success,
-              let window, CFGetTypeID(window) == AXUIElementGetTypeID()
+        guard let focused = window(appElement, kAXFocusedWindowAttribute) else { return nil }
+        if let subrole = string(focused, kAXSubroleAttribute), auxiliarySubroles.contains(subrole),
+           let main = window(appElement, kAXMainWindowAttribute), let t = string(main, kAXTitleAttribute) {
+            return t
+        }
+        return string(focused, kAXTitleAttribute)
+    }
+
+    private static func window(_ app: AXUIElement, _ attribute: String) -> AXUIElement? {
+        var value: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(app, attribute as CFString, &value) == .success,
+              let value, CFGetTypeID(value) == AXUIElementGetTypeID()
         else { return nil }
-        var title: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(window as! AXUIElement, kAXTitleAttribute as CFString, &title) == .success,
-              let s = title as? String, !s.isEmpty
+        return (value as! AXUIElement)
+    }
+
+    private static func string(_ element: AXUIElement, _ attribute: String) -> String? {
+        var value: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, attribute as CFString, &value) == .success,
+              let s = value as? String, !s.isEmpty
         else { return nil }
         return s
     }
