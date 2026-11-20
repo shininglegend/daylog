@@ -4,3 +4,4 @@ DerivedData/
 Local.xcconfig
 .DS_Store
 xcuserdata/
+.build/
