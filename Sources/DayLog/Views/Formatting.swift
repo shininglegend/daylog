@@ -14,6 +14,11 @@ enum Fmt {
         return (part / whole).formatted(.percent.precision(.fractionLength(0)))
     }
 
+    /// "Tue 9:05 AM–9:10 AM": the weekday the block started on, then its time range.
+    static func dayAndRange(_ start: Date, _ end: Date) -> String {
+        "\(start.formatted(.dateTime.weekday(.abbreviated))) \(time(start))–\(time(end))"
+    }
+
     static func time(_ date: Date) -> String {
         date.formatted(date: .omitted, time: .shortened)
     }

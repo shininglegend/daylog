@@ -25,6 +25,22 @@ struct TimelineView: View {
 
     /// Breaks shorter than this between recorded segments aren't shown as gaps.
     private static let minGap: TimeInterval = 60
+    /// Idle shorter than this is folded into the preceding entry instead of shown.
+    private static let minIdle: TimeInterval = 180
+
+    /// Chronological segments with short idle periods absorbed into the entry before them (display only).
+    private var displaySegments: [Segment] {
+        var out: [Segment] = []
+        for s in segments {
+            if s.state.idle, s.end.timeIntervalSince(s.start) < Self.minIdle,
+               let last = out.last, !last.state.idle {
+                out[out.count - 1].end = max(last.end, s.end)
+            } else {
+                out.append(s)
+            }
+        }
+        return out
+    }
 
     var body: some View {
         VStack(alignment: .leading) {
@@ -77,13 +93,14 @@ struct TimelineView: View {
     private var items: [Item] {
         var all: [Item] = []
         var newerStart: Date?
-        for s in segments.reversed() {
+        for s in displaySegments.reversed() {
+            // Unrecorded time after this segment, idle or not (e.g. sleep after an idle block).
+            if let newer = newerStart, newer.timeIntervalSince(s.end) >= Self.minGap {
+                all.append(.gap(id: "g\(s.id)", start: s.end, end: newer, idle: false))
+            }
             if s.state.idle {
                 all.append(.gap(id: "i\(s.id)", start: s.start, end: s.end, idle: true))
             } else {
-                if let newer = newerStart, newer.timeIntervalSince(s.end) >= Self.minGap {
-                    all.append(.gap(id: "g\(s.id)", start: s.end, end: newer, idle: false))
-                }
                 all.append(.segment(s))
             }
             newerStart = s.start
@@ -111,9 +128,9 @@ struct TimelineView: View {
 
     private func row(_ s: Segment) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 12) {
-            Text("\(Fmt.time(s.start))–\(Fmt.time(s.end))")
+            Text(Fmt.dayAndRange(s.start, s.end))
                 .monospacedDigit().foregroundStyle(.secondary)
-                .frame(width: 130, alignment: .leading)
+                .frame(width: 170, alignment: .leading)
             VStack(alignment: .leading, spacing: 2) {
                 HStack {
                     Text(s.state.appName ?? "Unknown").bold()
