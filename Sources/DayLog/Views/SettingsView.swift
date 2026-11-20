@@ -37,7 +37,9 @@ struct SettingsView: View {
                 LabeledContent("Accessibility (window titles)") {
                     HStack {
                         status(model.accessibilityGranted ? "Allowed" : "Not allowed", ok: model.accessibilityGranted)
-                        Button("Open Settings") { Permissions.openAccessibilitySettings() }
+                        if !model.accessibilityGranted {
+                            Button("Open Accessibility Settings") { Permissions.openAccessibilitySettings() }
+                        }
                     }
                 }
                 LabeledContent("Automation: Google Chrome (websites)") {

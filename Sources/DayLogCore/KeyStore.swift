@@ -40,15 +40,67 @@ public enum KeyStoreError: Error {
     case keychain(OSStatus)
 }
 
-/// Generic-password items in the login keychain. The default access list
-/// (only this app, as identified by its code signature) applies.
+/// All keys live in ONE generic-password item in the login keychain (a JSON map of
+/// name -> base64 key), so macOS asks for keychain access once, not once per hour key.
+/// Deleting an hour's key removes it from the map and rewrites the item, so destroyed
+/// keys stay destroyed. The default access list (only this app, as identified by its
+/// code signature) applies.
+///
+/// Earlier builds stored one item per key (service = key name). Those are still read on
+/// demand, copied into the bundle item, and deleted.
 public final class KeychainKeyStore: KeyStore {
     private static let account = "daylog"
-    private var cache: [String: SymmetricKey] = [:]
+    static let bundleService = "local.daylog.keys"
+    private let lock = NSLock()
+    private var bundle: [String: Data]?
 
     public init() {}
 
-    private func baseQuery(_ name: String) -> [String: Any] {
+    // MARK: Bundle item
+
+    private func bundleQuery() -> [String: Any] {
+        [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: Self.bundleService,
+            kSecAttrAccount as String: Self.account,
+        ]
+    }
+
+    private func loadBundle() throws -> [String: Data] {
+        if let bundle { return bundle }
+        var query = bundleQuery()
+        query[kSecReturnData as String] = true
+        query[kSecMatchLimit as String] = kSecMatchLimitOne
+        var out: CFTypeRef?
+        let status = SecItemCopyMatching(query as CFDictionary, &out)
+        var loaded: [String: Data] = [:]
+        if status == errSecSuccess, let data = out as? Data {
+            loaded = try JSONDecoder().decode([String: Data].self, from: data)
+        } else if status != errSecItemNotFound {
+            throw KeyStoreError.keychain(status)
+        }
+        bundle = loaded
+        return loaded
+    }
+
+    private func saveBundle(_ keys: [String: Data]) throws {
+        let data = try JSONEncoder().encode(keys)
+        let status = SecItemUpdate(bundleQuery() as CFDictionary, [kSecValueData as String: data] as CFDictionary)
+        if status == errSecItemNotFound {
+            var add = bundleQuery()
+            add[kSecValueData as String] = data
+            add[kSecAttrLabel as String] = Self.bundleService
+            let addStatus = SecItemAdd(add as CFDictionary, nil)
+            guard addStatus == errSecSuccess else { throw KeyStoreError.keychain(addStatus) }
+        } else if status != errSecSuccess {
+            throw KeyStoreError.keychain(status)
+        }
+        bundle = keys
+    }
+
+    // MARK: Legacy per-key items
+
+    private func legacyQuery(_ name: String) -> [String: Any] {
         [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: name,
@@ -56,40 +108,60 @@ public final class KeychainKeyStore: KeyStore {
         ]
     }
 
-    public func key(named name: String) throws -> SymmetricKey? {
-        if let k = cache[name] { return k }
-        var query = baseQuery(name)
+    private func legacyKey(_ name: String) throws -> Data? {
+        var query = legacyQuery(name)
         query[kSecReturnData as String] = true
         query[kSecMatchLimit as String] = kSecMatchLimitOne
         var out: CFTypeRef?
         let status = SecItemCopyMatching(query as CFDictionary, &out)
         if status == errSecItemNotFound { return nil }
         guard status == errSecSuccess, let data = out as? Data else { throw KeyStoreError.keychain(status) }
-        let key = SymmetricKey(data: data)
-        cache[name] = key
-        return key
+        return data
+    }
+
+    private func deleteLegacy(_ name: String) throws {
+        let status = SecItemDelete(legacyQuery(name) as CFDictionary)
+        guard status == errSecSuccess || status == errSecItemNotFound else { throw KeyStoreError.keychain(status) }
+    }
+
+    // MARK: KeyStore
+
+    public func key(named name: String) throws -> SymmetricKey? {
+        lock.lock(); defer { lock.unlock() }
+        return try lockedKey(named: name)
+    }
+
+    private func lockedKey(named name: String) throws -> SymmetricKey? {
+        var keys = try loadBundle()
+        if let data = keys[name] { return SymmetricKey(data: data) }
+        guard let data = try legacyKey(name) else { return nil }
+        keys[name] = data
+        try saveBundle(keys)
+        try? deleteLegacy(name)
+        return SymmetricKey(data: data)
     }
 
     public func keyCreatingIfNeeded(named name: String) throws -> SymmetricKey {
-        if let k = try key(named: name) { return k }
+        lock.lock(); defer { lock.unlock() }
+        if let k = try lockedKey(named: name) { return k }
         let key = SymmetricKey(size: .bits256)
-        var query = baseQuery(name)
-        query[kSecValueData as String] = key.withUnsafeBytes { Data($0) }
-        query[kSecAttrLabel as String] = name
-        let status = SecItemAdd(query as CFDictionary, nil)
-        if status == errSecDuplicateItem, let existing = try self.key(named: name) { return existing }
-        guard status == errSecSuccess else { throw KeyStoreError.keychain(status) }
-        cache[name] = key
+        var keys = try loadBundle()
+        keys[name] = key.withUnsafeBytes { Data($0) }
+        try saveBundle(keys)
         return key
     }
 
     public func deleteKey(named name: String) throws {
-        cache[name] = nil
-        let status = SecItemDelete(baseQuery(name) as CFDictionary)
-        guard status == errSecSuccess || status == errSecItemNotFound else { throw KeyStoreError.keychain(status) }
+        lock.lock(); defer { lock.unlock() }
+        var keys = try loadBundle()
+        if keys.removeValue(forKey: name) != nil { try saveBundle(keys) }
+        try deleteLegacy(name)
     }
 
     public func allKeyNames() throws -> [String] {
+        lock.lock(); defer { lock.unlock() }
+        var names = Set(try loadBundle().keys)
+        // Legacy items: attributes only, which never triggers an access prompt.
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrAccount as String: Self.account,
@@ -98,9 +170,14 @@ public final class KeychainKeyStore: KeyStore {
         ]
         var out: CFTypeRef?
         let status = SecItemCopyMatching(query as CFDictionary, &out)
-        if status == errSecItemNotFound { return [] }
-        guard status == errSecSuccess, let items = out as? [[String: Any]] else { throw KeyStoreError.keychain(status) }
-        return items.compactMap { $0[kSecAttrService as String] as? String }.filter { $0.hasPrefix(KeyNames.prefix) }
+        if status == errSecSuccess, let items = out as? [[String: Any]] {
+            for case let service as String in items.compactMap({ $0[kSecAttrService as String] }) where service != Self.bundleService {
+                names.insert(service)
+            }
+        } else if status != errSecItemNotFound {
+            throw KeyStoreError.keychain(status)
+        }
+        return names.filter { $0.hasPrefix(KeyNames.prefix) }
     }
 }
 

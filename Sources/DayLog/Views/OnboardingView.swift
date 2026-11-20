@@ -14,9 +14,10 @@ struct OnboardingView: View {
                 detail: "Lets DayLog read the title of the focused window. Without it, DayLog records only app names.",
                 granted: model.accessibilityGranted
             ) {
-                HStack {
-                    Button("Request Access") { Permissions.promptAccessibility() }
-                    Button("Open Settings") { Permissions.openAccessibilitySettings() }
+                if !model.accessibilityGranted {
+                    Button("Open Accessibility Settings") { Permissions.openAccessibilitySettings() }
+                    Text("macOS no longer reliably shows a prompt. In the list, turn DayLog on, or add it with the + button.")
+                        .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 }
             }
 

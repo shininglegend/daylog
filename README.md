@@ -4,9 +4,9 @@ A personal macOS menu bar app that records which app, window title, and Chrome w
 
 - **No network.** The app makes no network connections, and the build fails if the binary links Network.framework or references URLSession, CFSocket, or `nw_` symbols.
 - **No screenshots, no keystrokes.** It needs only Accessibility (window titles) and Automation for Google Chrome (active tab domain). Screen Recording and Input Monitoring aren't used.
-- **Encrypted, short-lived detail.** Window titles and domains are encrypted with a key per hour (AES-GCM, keys in your login keychain). After 48 hours, entries are rolled into daily per-app and per-domain totals, deleted, and their hour keys are destroyed.
+- **Encrypted, short-lived detail.** Window titles and domains are encrypted with a key per hour (AES-GCM, keys stored together in one login-keychain item, so macOS asks for keychain access once). After 48 hours, entries are rolled into daily per-app and per-domain totals, deleted, and their hour keys are destroyed.
 
-Requires macOS 14 or later. The full spec is in [PLAN.md](PLAN.md).
+Requires macOS 14 or later. On macOS 27.3+, macOS no longer reliably prompts for Accessibility: use the "Open Accessibility Settings" button and turn DayLog on (or add it with +). If a stale entry is stuck, run `tccutil reset Accessibility local.daylog` and relaunch. The full spec is in [PLAN.md](PLAN.md).
 
 ## Build
 

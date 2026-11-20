@@ -4,12 +4,6 @@ import ApplicationServices
 enum Permissions {
     static var accessibilityGranted: Bool { AXIsProcessTrusted() }
 
-    /// Shows the system "allow Accessibility" prompt if not yet trusted.
-    static func promptAccessibility() {
-        let options = ["AXTrustedCheckOptionPrompt": true] as CFDictionary
-        _ = AXIsProcessTrustedWithOptions(options)
-    }
-
     enum AutomationStatus {
         case granted, denied, notDetermined, chromeNotRunning, unknown
     }
